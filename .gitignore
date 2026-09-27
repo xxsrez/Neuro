@@ -36,6 +36,11 @@ venv/
 /outputs/
 /artifacts/
 
-# .NET generated files
+# Historical local .NET build files
 **/bin/
 **/obj/
+
+# Default Go executable and test binaries
+/neuro
+*.test
+coverage.out

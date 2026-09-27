@@ -33,7 +33,7 @@
 
 ## Текущее состояние
 
-Реализован локальный прототип на C#/.NET 10: double, явные циклы,
+Реализован локальный прототип на Go: float64, явные циклы,
 только стандартная библиотека. По начальным координатам сеть предсказывает
 результат 20 шагов нелинейного движения точки.
 
@@ -42,20 +42,25 @@
 Есть ручной обратный проход, численные проверки градиентов, журналы,
 сохранение/загрузка весов и автономный HTML-отчёт.
 
-Первый опыт на 200 эпохах: валидационная MSE 0.000364, тестовая 0.000393;
-аффинная контрольная модель даёт валидационную MSE 0.416817.
-Подробности и границы результата: [отчёт](docs/reports/prototype-2026-09-27.md).
+Первая версия была написана на C#; результаты того опыта сохранены
+в [историческом отчёте](docs/reports/prototype-2026-09-27.md).
+Переход на Go сохраняет архитектуру, ручные вычисления, команды экспериментов
+и формат JSON-весов.
+Полный Go-запуск на 200 эпохах достиг валидационной MSE 0.000364
+и тестовой MSE 0.000393. Проверки перехода описаны в
+[отчёте Go-версии](docs/reports/go-migration-2026-09-27.md).
 
 ## Запуск
 
-Нужен .NET SDK 10. Внешние пакеты для обучения не требуются.
+Нужен Go 1.23 или новее. Внешние пакеты для обучения не требуются.
 Выполнять из корня репозитория:
 
 ```sh
-dotnet build Neuro.slnx -c Release
-dotnet run --project tests/Neuro.Tests -c Release --no-build
-dotnet run --project src/Neuro.Cli -c Release --no-build -- train --out runs/my-first-run
-dotnet run --project src/Neuro.Cli -c Release --no-build -- evaluate runs/my-first-run
+go test ./...
+go vet ./...
+go build -o build/neuro ./cmd/neuro
+./build/neuro train --out runs/my-first-run
+./build/neuro evaluate runs/my-first-run
 ```
 
 Каталог запуска должен быть новым: существующие результаты не перезаписываются.
@@ -65,8 +70,8 @@ dotnet run --project src/Neuro.Cli -c Release --no-build -- evaluate runs/my-fir
 Короткий опыт или выбор активации:
 
 ```sh
-dotnet run --project src/Neuro.Cli -c Release --no-build -- train --epochs 20 --activation Tanh --out runs/tanh-20
-dotnet run --project src/Neuro.Cli -c Release --no-build -- --help
+go run ./cmd/neuro train --epochs 20 --activation Tanh --out runs/tanh-20
+go run ./cmd/neuro --help
 ```
 
 Параметры, файлы результатов и проверки отчёта:

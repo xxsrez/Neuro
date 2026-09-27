@@ -2,19 +2,20 @@
 
 ## Требования и проверка ядра
 
-.NET SDK 10, только стандартная библиотека. Проверено с SDK 10.0.401.
+Go 1.23 или новее, только стандартная библиотека. Проверено с Go 1.27.1.
 Node.js нужен только для дополнительного теста созданного HTML,
 для обучения и просмотра отчёта он не требуется.
 
 Из корня репозитория:
 
 ```sh
-dotnet build Neuro.slnx -c Release
-dotnet run --project tests/Neuro.Tests -c Release --no-build
+go test ./...
+go vet ./...
+go build -o build/neuro ./cmd/neuro
 ```
 
-Тесты — самостоятельный консольный проект, без внешнего тестового фреймворка.
-Он возвращает ненулевой код при ошибке. Проверяются ручные примеры,
+Тесты используют стандартный пакет testing; go test возвращает ненулевой
+код при ошибке. Проверяются ручные примеры,
 численные производные параметров и входа маленькой сети для всех активаций,
 остаточный путь, накопление пакетов, оптимизаторы, воспроизводимость
 и обучение простой контрольной задачи.
@@ -22,8 +23,8 @@ dotnet run --project tests/Neuro.Tests -c Release --no-build
 ## Обучение и оценка
 
 ```sh
-dotnet run --project src/Neuro.Cli -c Release --no-build -- train --out runs/new-experiment
-dotnet run --project src/Neuro.Cli -c Release --no-build -- evaluate runs/new-experiment
+./build/neuro train --out runs/new-experiment
+./build/neuro evaluate runs/new-experiment
 ```
 
 Каталог результата должен быть новым. Программа не затирает существующие
@@ -44,7 +45,7 @@ dotnet run --project src/Neuro.Cli -c Release --no-build -- evaluate runs/new-ex
 | --grid | 101 | Число точек на стороне карты ошибок |
 | --weight-seed, --shuffle-seed | 42, 4004 | Начальные состояния весов и перемешивания |
 | --train-seed, --validation-seed, --test-seed | 1001, 2002, 3003 | Независимые состояния генераторов данных |
-| --out | runs/prototype | Новый каталог результатов |
+| --out | runs/go-prototype | Новый каталог результатов |
 
 Имена активаций и оптимизаторов принимаются без учёта регистра.
 Начальные состояния генерируют поток SplitMix64; алгоритм зафиксирован
@@ -76,7 +77,7 @@ dotnet run --project src/Neuro.Cli -c Release --no-build -- evaluate runs/new-ex
 
 ```sh
 node tests/report-check.mjs runs/new-experiment
-dotnet run --project src/Neuro.Cli -c Release --no-build -- report runs/new-experiment
+./build/neuro report runs/new-experiment
 ```
 
 Тест проверяет встроенные данные, соответствие CSV, расстояния на карте,
@@ -88,7 +89,7 @@ dotnet run --project src/Neuro.Cli -c Release --no-build -- report runs/new-expe
 сравниваются все метрики по эпохам и лучшие/последние веса, исключая время.
 
 ```sh
-node tests/report-check.mjs runs/prototype runs/prototype-repeat
+node tests/report-check.mjs runs/go-prototype runs/go-prototype-repeat
 ```
 
 Откройте report.html самостоятельно. Он не обращается к интернету.
@@ -97,3 +98,24 @@ node tests/report-check.mjs runs/prototype runs/prototype-repeat
 точек карты. Добавление ?fail=1 к адресу включает явный отказ интерактивного
 вида для проверки сохранности основного отчёта.
 Проверка отображения на телефоне и в конкретных просмотрщиках не проводилась.
+
+## Совместимость с первой версией
+
+Go читает JSON-веса и данные отчётов C#-версии (formatVersion = 1).
+Порядок параметров, SplitMix64 и нормализация сохранены. При наличии
+локального runs/prototype/ дополнительный Go-тест сравнивает предсказания
+с исходной моделью. В чистом клоне он пропускается, остальные тесты
+не зависят от старых результатов или установленного .NET.
+
+Исходники первой версии сохранены в Git-коммите ff3165d. Точное совпадение
+нового обучения между языками не гарантируется: математические функции
+и вычисления с плавающей точкой могут отличаться. Совместимость проверяется
+на фиксированных весах отдельно от обучения с нуля.
+
+При наличии исходных артефактов сравнение числовых рядов двух реализаций:
+
+```sh
+node tests/compare-implementations.mjs runs/prototype runs/go-prototype
+```
+
+Этот тест использует численный допуск и не сравнивает время выполнения.

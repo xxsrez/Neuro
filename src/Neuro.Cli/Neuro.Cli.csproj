@@ -1,7 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="../Neuro.Core/Neuro.Core.csproj" />
-    <None Include="../../assets/report.html" Link="report.html" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-</Project>
