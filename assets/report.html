@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuro — обучение и диагностика</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4f6fa;--card:#fff;--ink:#172338;--muted:#50617b;--border:#d6deeb}
+@media(prefers-color-scheme:dark){:root{--bg:#101723;--card:#192335;--ink:#e5ecf7;--muted:#aebbd0;--border:#35465f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,sans-serif}
+main{max-width:1050px;margin:auto;padding:28px 20px 70px}h1{font-size:clamp(27px,4vw,42px);line-height:1.2}h2{font-size:23px;line-height:1.3}
+section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin:25px 0}.eyebrow{letter-spacing:.12em;font-size:12px;color:var(--muted)}.muted{color:var(--muted)}
+svg{width:100%;height:auto;display:block}svg text{fill:var(--ink);font:12px system-ui}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--border)}.table-wrap{overflow-x:auto}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}button,select,input{font:inherit;padding:7px;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:6px}button{cursor:pointer}label{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 12px 6px 0}
+canvas{max-width:100%;height:auto;border:1px solid var(--border);display:block;touch-action:manipulation}.plots{display:grid;grid-template-columns:1fr 1fr;gap:20px}.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}.tile{font-size:12px}.tile canvas{width:100%}.status{color:#c2410c}
+@media(max-width:650px){main{padding:16px 12px 40px}section{padding:14px}.plots{grid-template-columns:1fr}th,td{font-size:13px}label{display:flex}h2{font-size:21px}}
+</style>
+</head>
+<body><main>
+<article id="static-report">@@STATIC@@</article>
+<section id="interactive"><h2>Исследовать результат</h2>
+<p id="status">Основные графики выше доступны без JavaScript. Интерактивные инструменты загружаются…</p>
+<div id="controls" hidden>
+<h3>Масштаб кривых потерь</h3><label><input type="checkbox" id="log"> Логарифмическая шкала</label>
+<canvas id="loss" width="860" height="330" aria-label="Интерактивный график потерь"></canvas>
+<div class="plots"><div><h3>Карта ошибок</h3><p>Нажмите на карту, чтобы посмотреть конечные координаты.</p><canvas id="error" width="440" height="440"></canvas><p id="point"></p></div>
+<div><h3>Движение и предсказание</h3><p>Линии — настоящие траектории симулятора. Точки: зелёные — настоящие конечные положения, оранжевые — предсказания.</p><canvas id="motion" width="440" height="440"></canvas></div></div>
+<h3>Активности нейронов</h3><label>Блок <select id="block"></select></label>
+<p id="activation-scale"></p><p class="muted">Выход активации внутри ветви, сетка 21 × 21. Синий — отрицательное, красный — положительное. Одинаковая шкала для всех нейронов выбранного блока.</p>
+<div id="neurons" class="tiles"></div>
+<h3>Градиенты на лучших весах</h3><div class="table-wrap"><table><thead><tr><th>Блок</th><th>RMS среднего градиента параметров</th><th>RMS градиента входа на пример</th></tr></thead><tbody id="gradients"></tbody></table></div>
+</div></section>
+<p class="muted">Отчёт содержит данные запуска. Интернет и внешние библиотеки не используются. Точное продолжение обучения из файлов весов в прототипе не поддерживается.</p>
+</main>
+<script type="application/json" id="data">@@DATA@@</script>
+<script>
+'use strict';
+try {
+  if (new URLSearchParams(location.search).has('fail')) throw new Error('Проверка отказа интерактивного вида');
+  const d=JSON.parse(document.getElementById('data').textContent), c=d.config;
+  const $=id=>document.getElementById(id), fmt=x=>Number(x).toPrecision(5);
+  const colors={train:'#2563eb',validation:'#ea580c'};
+  function clear(canvas){const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas недоступен');ctx.clearRect(0,0,canvas.width,canvas.height);return ctx;}
+  function loss(){const canvas=$('loss'),ctx=clear(canvas),w=canvas.width,h=canvas.height,log=$('log').checked;
+    const values=d.history.flatMap(r=>[r.train.mse,r.validation.mse]),max=Math.max(...values),min=Math.max(1e-12,Math.min(...values));
+    const transform=v=>log?Math.log10(Math.max(v,1e-12)):v,lo=log?transform(min):0,hi=transform(max),span=Math.max(1e-12,hi-lo);
+    ctx.strokeStyle='#94a3b8';ctx.strokeRect(65,15,w-90,h-55);ctx.fillStyle='#708198';ctx.font='13px system-ui';ctx.fillText(fmt(max),5,25);ctx.fillText(log?fmt(min):'0',5,h-40);
+    ctx.fillText('Эпоха',w-70,h-10);ctx.fillText('0',65,h-10);ctx.fillText(String(c.epochs),w-100,h-10);
+    for(const key of ['train','validation']){ctx.beginPath();ctx.strokeStyle=colors[key];ctx.lineWidth=2;
+      d.history.forEach((r,i)=>{const x=65+(w-90)*r.epoch/c.epochs,y=15+(h-55)*(hi-transform(r[key].mse))/span;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();}
+  }
+  function heat(canvas,values,side,color){const ctx=clear(canvas);const image=ctx.createImageData(side,side);
+    for(let y=0;y<side;y++)for(let x=0;x<side;x++){const rgb=color(values[y*side+x]),p=((side-1-y)*side+x)*4;image.data.set([...rgb,255],p)}
+    const small=document.createElement('canvas');small.width=side;small.height=side;small.getContext('2d').putImageData(image,0,0);
+    ctx.imageSmoothingEnabled=false;ctx.drawImage(small,0,0,canvas.width,canvas.height);
+  }
+  const errors=d.grid.map(p=>p.error),errorMax=Math.max(...errors,1e-12);
+  heat($('error'),errors,c.gridSide,v=>{const t=v/errorMax;return [40+210*t,120-60*t,220-180*t]});
+  function showPoint(event){const r=$('error').getBoundingClientRect(),x=Math.min(c.gridSide-1,Math.max(0,Math.floor((event.clientX-r.left)/r.width*c.gridSide))),
+    y=c.gridSide-1-Math.min(c.gridSide-1,Math.max(0,Math.floor((event.clientY-r.top)/r.height*c.gridSide))),p=d.grid[y*c.gridSide+x];
+    $('point').textContent=`Вход (${fmt(p.x)}, ${fmt(p.y)}). Ответ (${fmt(p.targetX)}, ${fmt(p.targetY)}). Предсказание (${fmt(p.predictedX)}, ${fmt(p.predictedY)}). Расстояние ${fmt(p.error)}.`;
+  }
+  $('error').addEventListener('click',showPoint);
+  const motion=clear($('motion')),all=d.trajectories.flat();
+  const maxCoord=Math.max(Math.PI,...all.flatMap(p=>p.map(Math.abs)),...d.grid.flatMap(p=>[Math.abs(p.targetX),Math.abs(p.targetY),Math.abs(p.predictedX),Math.abs(p.predictedY)]))*1.05;
+  const xy=(x,y)=>[220+200*x/maxCoord,220-200*y/maxCoord];
+  motion.strokeStyle='#94a3b8';motion.beginPath();motion.moveTo(20,220);motion.lineTo(420,220);motion.moveTo(220,20);motion.lineTo(220,420);motion.stroke();
+  motion.strokeStyle='#2563eb';for(const path of d.trajectories){motion.beginPath();path.forEach((p,i)=>{const [x,y]=xy(...p);i?motion.lineTo(x,y):motion.moveTo(x,y)});motion.stroke();}
+  const stride=Math.max(1,Math.floor(c.gridSide/10));
+  for(let y=0;y<c.gridSide;y+=stride)for(let x=0;x<c.gridSide;x+=stride){const p=d.grid[y*c.gridSide+x];
+    for(const [px,py,color] of [[p.targetX,p.targetY,'#16a34a'],[p.predictedX,p.predictedY,'#ea580c']]){motion.fillStyle=color;const [a,b]=xy(px,py);motion.beginPath();motion.arc(a,b,2,0,Math.PI*2);motion.fill();}}
+  function neurons(){const b=Number($('block').value),values=d.activations[b];$('neurons').replaceChildren();
+    if(!values){$('activation-scale').textContent='Нет остаточных блоков.';return;}
+    const scale=Math.max(1e-12,...values.map(Math.abs));$('activation-scale').textContent=`Диапазон цвета: −${fmt(scale)} … +${fmt(scale)}.`;
+    for(let n=0;n<c.width;n++){const tile=document.createElement('div');tile.className='tile';const title=document.createElement('p');title.textContent=`Нейрон ${n+1}`;
+      const canvas=document.createElement('canvas');canvas.width=126;canvas.height=126;canvas.setAttribute('aria-label',`Активность нейрона ${n+1}`);tile.append(title,canvas);$('neurons').append(tile);
+      const v=Array.from({length:d.activationSide**2},(_,i)=>values[i*c.width+n]);
+      heat(canvas,v,d.activationSide,x=>{const t=Math.min(1,Math.abs(x)/scale);return x<0?[240-200*t,240-120*t,245-20*t]:[245,240-180*t,240-190*t]});}
+  }
+  for(let b=0;b<c.blocks;b++){const option=document.createElement('option');option.value=b;option.textContent=String(b+1);$('block').append(option)}
+  for(const g of d.gradients){const tr=document.createElement('tr');for(const value of [g.block+1,fmt(g.parameterRms),fmt(g.inputRms)]){const td=document.createElement('td');td.textContent=value;tr.append(td)}$('gradients').append(tr)}
+  $('controls').hidden=false;loss();neurons();$('log').addEventListener('change',loss);$('block').addEventListener('change',neurons);
+  $('status').textContent='Интерактивный вид готов. Основные графики выше сохранены в самом документе.';
+} catch(error){document.getElementById('controls').hidden=true;document.getElementById('status').textContent=`Интерактивный вид недоступен: ${error.message}. Основной отчёт выше доступен.`;}
+</script>
+</body></html>

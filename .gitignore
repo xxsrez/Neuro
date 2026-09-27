@@ -35,3 +35,7 @@ venv/
 /runs/
 /outputs/
 /artifacts/
+
+# .NET generated files
+**/bin/
+**/obj/
