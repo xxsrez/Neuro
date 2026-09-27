@@ -3,10 +3,8 @@ package app
 import (
 	"bytes"
 	"encoding/json"
-	"math"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -111,52 +109,5 @@ func TestZeroBlocks(t *testing.T) {
 	}
 	if report.Activations == nil || report.Gradients == nil || len(report.Activations) != 0 || len(report.Gradients) != 0 {
 		t.Fatal("empty arrays must serialize as []")
-	}
-}
-
-// Optional local parity test uses original C# artifacts if available. A fresh
-// clone can run all other tests without generated data or .NET installed.
-func TestOriginalCheckpointParity(t *testing.T) {
-	directory := filepath.Join("..", "..", "runs", "prototype")
-	if _, err := os.Stat(filepath.Join(directory, "best-weights.json")); err != nil {
-		t.Skip("original C# run not present")
-	}
-	var saved WeightFile
-	if err := readJSON(filepath.Join(directory, "best-weights.json"), &saved); err != nil {
-		t.Fatal(err)
-	}
-	var report ReportData
-	if err := readJSON(filepath.Join(directory, "report-data.json"), &report); err != nil {
-		t.Fatal(err)
-	}
-	c := saved.Configuration
-	n := neuro.NewNetwork(c.Width, c.Blocks, c.Activation, c.Alpha, c.WeightSeed)
-	if err := n.Restore(saved.Parameters); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < len(report.Grid); i += 97 {
-		p := report.Grid[i]
-		y := n.Forward([]float64{p.X / math.Pi, p.Y / math.Pi})
-		if math.Abs(y[0]*math.Pi-p.PredictedX) > 1e-11 || math.Abs(y[1]*math.Pi-p.PredictedY) > 1e-11 {
-			t.Fatalf("cross-language prediction mismatch at %d", i)
-		}
-	}
-	var out bytes.Buffer
-	if err := EvaluateSaved(directory, &out); err != nil {
-		t.Fatal(err)
-	}
-	var eval struct{ Validation, Test neuro.Metrics }
-	if err := json.Unmarshal(out.Bytes(), &eval); err != nil {
-		t.Fatal(err)
-	}
-	if math.Abs(eval.Validation.MSE-report.Summary.BestValidation.MSE) > 1e-12 || math.Abs(eval.Test.MSE-report.Summary.Test.MSE) > 1e-12 {
-		t.Fatal("cross-language metrics differ")
-	}
-	before := n.Snapshot()
-	if err := n.Restore(saved.Parameters); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(before, n.Snapshot()) {
-		t.Fatal("unexpected checkpoint mutation")
 	}
 }
